@@ -669,6 +669,9 @@ export interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = un
 
 type AnyToolDefinition = ToolDefinition<any, any, any>;
 
+/** Decorate a tool definition without mutating it or changing its name. */
+export type ToolWrapper = (tool: ToolDefinition) => ToolDefinition;
+
 export type ToolRenderers = Pick<AnyToolDefinition, "renderShell" | "renderCall" | "renderResult">;
 
 /**
@@ -1672,6 +1675,14 @@ export interface ExtensionAPI {
 		tool: ToolDefinition<TParams, TDetails, TState>,
 	): void;
 
+	/**
+	 * Decorate the effective definition of a tool, including tools registered later. Wrappers run
+	 * in extension load and registration order on each registry refresh, without capturing a base.
+	 * Return a new definition with the same name. A throwing or renaming wrapper makes the tool
+	 * unavailable and reports an extension error.
+	 */
+	wrapTool(name: string, wrapper: ToolWrapper): void;
+
 	// =========================================================================
 	// Command, Shortcut, Flag Registration
 	// =========================================================================
@@ -2276,6 +2287,7 @@ export interface Extension {
 	tools: Map<string, RegisteredTool>;
 	messageRenderers: Map<string, MessageRenderer>;
 	toolRenderers?: ToolRendererResolver[];
+	toolWrappers?: Array<{ name: string; wrapper: ToolWrapper }>;
 	markdownTransformer?: MarkdownTransformer;
 	entryRenderers?: Map<string, EntryRenderer>;
 	commands: Map<string, RegisteredCommand>;

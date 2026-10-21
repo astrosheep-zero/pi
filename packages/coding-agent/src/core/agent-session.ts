@@ -3556,6 +3556,15 @@ export class AgentSession {
 				sourceInfo: tool.sourceInfo,
 			});
 		}
+		const runner = this._extensionRunner;
+		for (const [name, entry] of definitionRegistry) {
+			const definition = runner.applyToolWrappers(entry.definition);
+			if (definition) {
+				definitionRegistry.set(name, { definition, sourceInfo: entry.sourceInfo });
+			} else {
+				definitionRegistry.delete(name);
+			}
+		}
 		this._toolDefinitions = definitionRegistry;
 		this._toolPromptSnippets = new Map(
 			Array.from(definitionRegistry.values())
@@ -3573,25 +3582,9 @@ export class AgentSession {
 				})
 				.filter((entry): entry is readonly [string, string[]] => entry !== undefined),
 		);
-		const runner = this._extensionRunner;
-		const wrappedExtensionTools = wrapRegisteredTools(allCustomTools, runner);
-		const wrappedBuiltInTools = wrapRegisteredTools(
-			Array.from(this._baseToolDefinitions.values())
-				.filter((definition) => this._isAllowedTool(definition.name))
-				.map((definition) => ({
-					definition,
-					sourceInfo: createSyntheticSourceInfo(`${BUILTIN_PATH_PREFIX}${definition.name}`, {
-						source: "builtin",
-					}),
-				})),
-			runner,
+		this._toolRegistry = new Map(
+			wrapRegisteredTools(Array.from(definitionRegistry.values()), runner).map((tool) => [tool.name, tool]),
 		);
-
-		const toolRegistry = new Map(wrappedBuiltInTools.map((tool) => [tool.name, tool]));
-		for (const tool of wrappedExtensionTools as AgentTool[]) {
-			toolRegistry.set(tool.name, tool);
-		}
-		this._toolRegistry = toolRegistry;
 
 		const nextActiveToolNames = (
 			options?.activeToolNames ? [...options.activeToolNames] : [...previousActiveToolNames]
@@ -3606,8 +3599,10 @@ export class AgentSession {
 				}
 			}
 		} else if (options?.includeAllExtensionTools) {
-			for (const tool of wrappedExtensionTools) {
-				if (this._isActivatedOnRegistration(tool.name)) nextActiveToolNames.push(tool.name);
+			for (const { definition } of allCustomTools) {
+				if (this._toolRegistry.has(definition.name) && this._isActivatedOnRegistration(definition.name)) {
+					nextActiveToolNames.push(definition.name);
+				}
 			}
 		} else if (!options?.activeToolNames) {
 			for (const toolName of this._toolRegistry.keys()) {

@@ -370,6 +370,8 @@ export class ExtensionRunner {
 	private sessionManager: SessionManager;
 	private modelRegistry: ModelRegistry;
 	private errorListeners: Set<ExtensionErrorListener> = new Set();
+	/** Wrappers can fail while constructing the registry, before a mode binds its error listener. */
+	private pendingToolWrapperErrors: ExtensionError[] = [];
 	private getModel: () => Model<any> | undefined = () => undefined;
 	private getScopedModels: () => readonly ScopedModel[] = () => [];
 	private isIdleFn: () => boolean = () => true;
@@ -646,6 +648,32 @@ export class ExtensionRunner {
 		return Array.from(toolsByName.values());
 	}
 
+	/** Compose wrappers around the current definition, never a previously wrapped base. */
+	applyToolWrappers(definition: RegisteredTool["definition"]): RegisteredTool["definition"] | undefined {
+		const name = definition.name;
+		for (const ext of this.extensions) {
+			for (const entry of ext.toolWrappers ?? []) {
+				if (entry.name !== name) continue;
+				try {
+					const wrapped = entry.wrapper(definition);
+					if (wrapped.name !== name) throw new Error(`Tool wrapper for "${name}" must keep its name`);
+					definition = wrapped;
+				} catch (error) {
+					const failure: ExtensionError = {
+						extensionPath: ext.path,
+						event: "wrap_tool",
+						error: error instanceof Error ? error.message : String(error),
+						stack: error instanceof Error ? error.stack : undefined,
+					};
+					if (this.errorListeners.size === 0) this.pendingToolWrapperErrors.push(failure);
+					else this.emitError(failure);
+					return undefined;
+				}
+			}
+		}
+		return definition;
+	}
+
 	/** Get a tool definition by name. Returns undefined if not found. */
 	getToolDefinition(toolName: string): RegisteredTool["definition"] | undefined {
 		for (const ext of this.extensions) {
@@ -743,6 +771,7 @@ export class ExtensionRunner {
 
 	onError(listener: ExtensionErrorListener): () => void {
 		this.errorListeners.add(listener);
+		for (const error of this.pendingToolWrapperErrors.splice(0)) listener(error);
 		return () => this.errorListeners.delete(listener);
 	}
 
