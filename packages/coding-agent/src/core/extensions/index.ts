@@ -194,6 +194,7 @@ export type {
 	ToolRenderResultOptions,
 	ToolResultEvent,
 	ToolResultEventResult,
+	ToolWrapper,
 	TreePreparation,
 	TurnEndEvent,
 	TurnEndEventResult,

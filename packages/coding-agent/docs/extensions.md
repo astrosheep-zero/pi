@@ -262,6 +262,26 @@ A tool can run other tools with `ctx.executeTool(name, args, { signal, onUpdate 
 
 See [`hello.ts`](../examples/extensions/hello.ts), [`todo.ts`](../examples/extensions/todo.ts), [`dynamic-tools.ts`](../examples/extensions/dynamic-tools.ts), and [`truncated-tool.ts`](../examples/extensions/truncated-tool.ts).
 
+### Wrap another tool
+
+`pi.wrapTool(name, wrapper)` decorates the effective definition of a tool, including built-in, extension, and MCP tools. It can target a tool that has not registered yet.
+
+```typescript
+pi.wrapTool("bash", (tool) => ({
+  ...tool,
+  execute: async (...args) => {
+    const start = performance.now();
+    try {
+      return await tool.execute(...args);
+    } finally {
+      console.error(`bash took ${performance.now() - start} ms`);
+    }
+  },
+}));
+```
+
+Wrappers compose in extension load order, then registration order; later wrappers wrap earlier ones. They still apply when the tool is re-registered. Return a new definition without mutating the input or changing its name. A wrapper that throws or changes the name makes the tool unavailable and reports an extension error.
+
 ### Tool exposure
 
 `exposure` controls how the model reaches a tool. "Callable" means callable from other tools through `ctx.executeTool()` (`ctx.tools`), as the `codemode` tool's scripts do:

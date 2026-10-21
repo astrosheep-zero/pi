@@ -34,6 +34,7 @@ import type {
 	RegisteredCommand,
 	ToolDefinition,
 	ToolRendererResolver,
+	ToolWrapper,
 } from "./types.ts";
 
 const require = createRequire(import.meta.url);
@@ -300,6 +301,13 @@ function createExtensionAPI(
 				definition: tool,
 				sourceInfo: extension.sourceInfo,
 			});
+			runtime.refreshTools();
+		},
+
+		wrapTool(name: string, wrapper: ToolWrapper): void {
+			assertActive();
+			extension.toolWrappers ??= [];
+			extension.toolWrappers.push({ name, wrapper });
 			runtime.refreshTools();
 		},
 
