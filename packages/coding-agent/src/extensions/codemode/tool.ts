@@ -24,7 +24,7 @@
 import { join } from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { CodemodeJsonSchema, CodemodeTool } from "@earendil-works/pi-codemode";
-import { renderToolOutputType, renderToolSample, toCodemodeIdentifier } from "@earendil-works/pi-codemode/declarations";
+import { renderToolOutputType, toCodemodeIdentifier } from "@earendil-works/pi-codemode/declarations";
 import { CODEMODE_SOURCE_GRAMMAR } from "@earendil-works/pi-codemode/source";
 import { type Static, Type } from "typebox";
 import { getDocsPath } from "../../config.ts";
@@ -125,7 +125,7 @@ function describeGlobals(models: boolean): string {
 		"Globals:",
 		"- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.",
 		"- `store(key, value)` and `load(key)` keep JSON values across codemode calls.",
-		"- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.",
+		"- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: inspect tool declarations or find unlisted tools, such as MCP tools.",
 	];
 	if (models) {
 		lines.push(`- \`models\`: classifiers and image generation. Read ${CODEMODE_DOCS_PATH} first.`);
@@ -170,17 +170,22 @@ export interface CodemodeDescriptionOptions {
 	/** Prompt guidelines of each tool, by tool name, listed after its description. */
 	guidelines?: ReadonlyMap<string, readonly string[]>;
 	/**
-	 * Estimated tokens (characters / 4) the tool sections may use. Tools that do not fit are left
-	 * out, like deferred tools. Unset lists every tool that is not deferred.
+	 * Estimated tokens (characters / 4) the tool sections may use. Tools that do not fit are listed
+	 * by name only, without their description. Unset lists every tool that is not deferred.
 	 */
 	inlineBudget?: number;
 }
 
-/** `### \`id\` (\`raw name\`)` followed by the tool's description and declaration. */
+/** `\`id\` (\`raw name\`)` for a tool heading or name-only fallback line. */
+function renderToolLabel(name: string): string {
+	const id = toCodemodeIdentifier(name);
+	return id === name ? `\`${id}\`` : `\`${id}\` (\`${name}\`)`;
+}
+
+/** `### \`id\` (\`raw name\`)` followed by the tool's description and prompt guidelines. */
 function renderToolSection(declaration: Omit<CodemodeTool, "execute">): string {
-	const id = toCodemodeIdentifier(declaration.name);
-	const heading = id === declaration.name ? `### \`${id}\`` : `### \`${id}\` (\`${declaration.name}\`)`;
-	return `${heading}\n${renderToolSample(declaration).trim()}`;
+	const description = declaration.description?.trim();
+	return `### ${renderToolLabel(declaration.name)}${description ? `\n${description}` : ""}`;
 }
 
 interface CatalogEntry {
@@ -220,10 +225,11 @@ function selectCatalog(groups: readonly CatalogGroup[], budget: number | undefin
 }
 
 /**
- * Model-facing description: the helper list, guidance for finding tools that are not listed, the
- * `models` API, and one section per listed tool, grouped by namespace. Deferred tools are never
- * listed and do not affect the description at all, so it stays the same while tools are registered
- * late (for example by MCP servers that connect). Tool sections are limited to `inlineBudget`.
+ * Model-facing description: the helper list, guidance for finding unlisted tools, the `models` API,
+ * and every non-deferred tool, grouped by namespace. Each tool gets a section with its description
+ * while `inlineBudget` allows, then only its name. Deferred tools are never listed and do not affect
+ * the description at all, so it stays the same while tools are registered late (for example by MCP
+ * servers that connect).
  */
 export function createCodemodeDescription(
 	tools: readonly AgentTool<any>[],
@@ -251,19 +257,12 @@ export function createCodemodeDescription(
 
 	const toolSections = ["Nested tools:"];
 	for (const { namespace, entries } of ordered) {
-		const visible = entries.filter((entry) => shown.has(entry.name));
 		if (namespace) {
-			// Only tools that did not fit the budget are counted as not listed here.
-			const listing =
-				visible.length === entries.length
-					? ""
-					: visible.length === 0
-						? " (tools not listed)"
-						: " (some tools not listed)";
 			const description = namespace.description?.trim();
-			toolSections.push(`## ${namespace.name}${listing}${description ? `\n${description}` : ""}`);
+			toolSections.push(`## ${namespace.name}${description ? `\n${description}` : ""}`);
 		}
-		for (const entry of visible) toolSections.push(entry.section);
+		for (const entry of entries)
+			toolSections.push(shown.has(entry.name) ? entry.section : `- ${renderToolLabel(entry.name)}`);
 	}
 	sections.push(toolSections.join("\n\n"));
 	return sections.join("\n\n");

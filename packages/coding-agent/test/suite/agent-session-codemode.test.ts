@@ -164,7 +164,7 @@ describe("AgentSession codemode tool", () => {
 		harness.settingsManager.applyOverrides({ codemode: { mode: "only" } });
 		harness.session.setActiveToolsByName(["read", "echo", "codemode"]);
 		expect(description("echo")).not.toContain("Codemode: `tools.echo");
-		expect(description("codemode")).toContain("### `echo`");
+		expect(description("codemode")).toContain("### `echo`\nEcho text back.\n\nSecond paragraph.");
 		expect(description("codemode")).not.toContain("### `stats`");
 		harness.setResponses([record]);
 		await harness.session.prompt("only");
@@ -185,11 +185,12 @@ describe("AgentSession codemode tool", () => {
 	});
 
 	// #10343
-	it("shows the guidelines of tools that do not fit the inline budget through describeTool()", async () => {
+	it("lists tools over the inline budget by name and keeps their guidelines in describeTool()", async () => {
 		const harness = await setup();
 		harness.settingsManager.applyOverrides({ codemode: { mode: "only", inlineBudget: 0 } });
 		harness.session.setActiveToolsByName(["read", "codemode"]);
 		const codemode = harness.session.agent.state.tools.find((tool) => tool.name === "codemode");
+		expect(codemode?.description).toContain("- `read`");
 		expect(codemode?.description).not.toContain("### `read`");
 		harness.setResponses([
 			fauxAssistantMessage([fauxToolCall("codemode", { code: 'text(await describeTool("read"))' })], {

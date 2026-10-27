@@ -110,17 +110,18 @@ describe("codemode description catalog", () => {
 		expect(description).toContain("`await describeNamespace(name)`");
 	});
 
-	it("fills the budget round-robin, cheapest first, and says what is missing", () => {
-		// Each small section costs about 42 tokens: one tool per group, then one more.
-		const description = createCodemodeDescription(all, { namespaces, inlineBudget: 170 });
-		expect(description).toContain("### `read_notes`");
-		expect(description).toContain("## mcp__docs (some tools not listed)");
-		expect(description).toContain("### `mcp__docs__search`");
+	it("fills the budget round-robin, cheapest first, and drops descriptions that do not fit", () => {
+		// Each small section costs 7 to 9 tokens: one tool per group, then one more.
+		const description = createCodemodeDescription(all, { namespaces, inlineBudget: 28 });
+		expect(description).toContain("### `read_notes`\nRead notes.");
+		expect(description).toContain("### `mcp__docs__search`\nSearch docs.");
+		expect(description).toContain("### `mcp__github__a`\nGitHub a.");
+		expect(description).toContain("- `mcp__github__b`");
+		expect(description).toContain("- `mcp__github__c`");
+		expect(description).toContain("- `mcp__docs__long`");
 		expect(description).not.toContain("### `mcp__docs__long`");
-		expect(description).toContain("## mcp__github (some tools not listed)");
-		expect(description).toContain("find unlisted tools, such as MCP tools");
 		// Deterministic: the same input gives the same description.
-		expect(createCodemodeDescription(all, { namespaces, inlineBudget: 170 })).toBe(description);
+		expect(createCodemodeDescription(all, { namespaces, inlineBudget: 28 })).toBe(description);
 	});
 
 	it("leaves deferred tools and their namespaces out entirely", () => {
@@ -141,9 +142,12 @@ describe("codemode description catalog", () => {
 		expect(description).not.toContain("Long usage guide.");
 	});
 
-	it("lists only namespaces with a zero budget", () => {
+	it("lists every tool by name with a zero budget", () => {
 		const description = createCodemodeDescription(all, { namespaces, inlineBudget: 0 });
-		expect(description).toContain("## mcp__docs (tools not listed)");
-		expect(description).not.toContain("codemode tool declaration:");
+		expect(description).toContain("Nested tools:\n\n- `read_notes`");
+		expect(description).toContain("## mcp__docs\n\n- `mcp__docs__search`");
+		expect(description).toContain("- `mcp__docs__long`");
+		expect(description).not.toContain("### `");
+		expect(description).not.toContain("Read notes.");
 	});
 });
